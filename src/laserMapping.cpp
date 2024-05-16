@@ -38,12 +38,11 @@
 
 #include <Python.h>
 #include <chrono>
+#include <cmath>
 #include <csignal>
 #include <fstream>
-#include <math.h>
 #include <mutex>
 #include <omp.h>
-#include <thread>
 #include <unistd.h>
 
 #include <geometry_msgs/msg/transform_stamped.hpp>
@@ -193,9 +192,9 @@ void pointBodyToWorld_ikfom(PointType const* const pi, PointType* const po, stat
     V3D p_body(pi->x, pi->y, pi->z);
     V3D p_global(s.rot * (s.offset_R_L_I * p_body + s.offset_T_L_I) + s.pos);
 
-    po->x         = p_global(0);
-    po->y         = p_global(1);
-    po->z         = p_global(2);
+    po->x         = static_cast<float>(p_global(0));
+    po->y         = static_cast<float>(p_global(1));
+    po->z         = static_cast<float>(p_global(2));
     po->intensity = pi->intensity;
 }
 
@@ -205,9 +204,9 @@ void pointBodyToWorld(PointType const* const pi, PointType* const po) {
         state_point.rot * (state_point.offset_R_L_I * p_body + state_point.offset_T_L_I)
         + state_point.pos);
 
-    po->x         = p_global(0);
-    po->y         = p_global(1);
-    po->z         = p_global(2);
+    po->x         = static_cast<float>(p_global(0));
+    po->y         = static_cast<float>(p_global(1));
+    po->z         = static_cast<float>(p_global(2));
     po->intensity = pi->intensity;
 }
 
@@ -229,9 +228,9 @@ void RGBpointBodyToWorld(PointType const* const pi, PointType* const po) {
         state_point.rot * (state_point.offset_R_L_I * p_body + state_point.offset_T_L_I)
         + state_point.pos);
 
-    po->x         = p_global(0);
-    po->y         = p_global(1);
-    po->z         = p_global(2);
+    po->x         = static_cast<float>(p_global(0));
+    po->y         = static_cast<float>(p_global(1));
+    po->z         = static_cast<float>(p_global(2));
     po->intensity = pi->intensity;
 }
 
@@ -239,9 +238,9 @@ void RGBpointBodyLidarToIMU(PointType const* const pi, PointType* const po) {
     V3D p_body_lidar(pi->x, pi->y, pi->z);
     V3D p_body_imu(state_point.offset_R_L_I * p_body_lidar + state_point.offset_T_L_I);
 
-    po->x         = p_body_imu(0);
-    po->y         = p_body_imu(1);
-    po->z         = p_body_imu(2);
+    po->x         = static_cast<float>(p_body_imu(0));
+    po->y         = static_cast<float>(p_body_imu(1));
+    po->z         = static_cast<float>(p_body_imu(2));
     po->intensity = pi->intensity;
 }
 
@@ -588,16 +587,19 @@ void set_posestamp(T& out) {
 }
 
 void publish_odometry(
-    const rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pubOdomAftMapped,
+    const rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr& pubOdomAftMapped,
     std::unique_ptr<tf2_ros::TransformBroadcaster>& tf_br) {
+
     odomAftMapped.header.frame_id = "lidar_init";
     odomAftMapped.child_frame_id  = "lidar_link";
     odomAftMapped.header.stamp    = get_ros_time(lidar_end_time);
     set_posestamp(odomAftMapped.pose);
     pubOdomAftMapped->publish(odomAftMapped);
+
     auto P = kf.get_P();
     for (int i = 0; i < 6; i++) {
-        int k                                    = i < 3 ? i + 3 : i - 3;
+        int k = i < 3 ? i + 3 : i - 3;
+
         odomAftMapped.pose.covariance[i * 6 + 0] = P(k, 3);
         odomAftMapped.pose.covariance[i * 6 + 1] = P(k, 4);
         odomAftMapped.pose.covariance[i * 6 + 2] = P(k, 5);
@@ -628,8 +630,6 @@ void publish_odometry(
     trans.transform.rotation.y    = rotation.y();
     trans.transform.rotation.z    = rotation.z();
     tf_br->sendTransform(trans);
-
-    
 }
 
 void publish_path(rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr pubPath) {
@@ -897,23 +897,28 @@ public:
             sub_pcl_pc_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
                 lid_topic, rclcpp::SensorDataQoS(), standard_pcl_cbk);
         }
+
         sub_imu_ = this->create_subscription<sensor_msgs::msg::Imu>(imu_topic, 10, imu_cbk);
+
         pubLaserCloudFull_ =
-            this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered", 20);
-        pubLaserCloudFull_body_ =
-            this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered_body", 20);
+            this->create_publisher<sensor_msgs::msg::PointCloud2>("/fast_lio/cloud_registered", 20);
+        pubLaserCloudFull_body_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
+            "/fast_lio/cloud_registered_body", 20);
         pubLaserCloudEffect_ =
-            this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_effected", 20);
-        pubLaserCloudMap_ = this->create_publisher<sensor_msgs::msg::PointCloud2>("/Laser_map", 20);
-        pubOdomAftMapped_ = this->create_publisher<nav_msgs::msg::Odometry>("/Odometry", 20);
-        pubPath_          = this->create_publisher<nav_msgs::msg::Path>("/path", 20);
-        tf_broadcaster_   = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+            this->create_publisher<sensor_msgs::msg::PointCloud2>("/fast_lio/cloud_effected", 20);
+        pubLaserCloudMap_ =
+            this->create_publisher<sensor_msgs::msg::PointCloud2>("/fast_lio/laser_map", 20);
+        pubOdomAftMapped_ =
+            this->create_publisher<nav_msgs::msg::Odometry>("/fast_lio/position", 20);
+        pubPath_ = this->create_publisher<nav_msgs::msg::Path>("/fast_lio/path", 20);
+
+        tf_broadcaster_        = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
         tf_static_broadcaster_ = std::make_unique<tf2_ros::StaticTransformBroadcaster>(*this);
 
         geometry_msgs::msg::TransformStamped t;
         t.header.stamp            = this->get_clock()->now();
         t.header.frame_id         = "lidar_init";
-        t.child_frame_id          = "odom_lidar";
+        t.child_frame_id          = "world";
         t.transform.translation.x = 0;
         t.transform.translation.y = 0;
         t.transform.translation.z = 0;
