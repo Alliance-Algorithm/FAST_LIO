@@ -7,8 +7,8 @@ endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-ADD_COMPILE_OPTIONS(-std=c++14)
-ADD_COMPILE_OPTIONS(-std=c++14)
+add_compile_options(-std=c++14)
+add_compile_options(-std=c++14)
 set(CMAKE_CXX_FLAGS "-std=c++14 -O3")
 
 add_definitions(-DROOT_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/\")
@@ -17,7 +17,8 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fexceptions")
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -std=c++0x -std=c++14 -fexceptions")
+set(CMAKE_CXX_FLAGS
+    "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -std=c++0x -std=c++14 -fexceptions")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 message("Current CPU archtecture: ${CMAKE_SYSTEM_PROCESSOR}")
@@ -65,18 +66,17 @@ find_package(livox_ros_driver2 REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 set(dependencies
-  rclcpp
-  rclcpp_components
-  geometry_msgs
-  nav_msgs
-  sensor_msgs
-  std_msgs
-  std_srvs
-  visualization_msgs
-  pcl_ros
-  pcl_conversions
-  livox_ros_driver2
-)
+    rclcpp
+    rclcpp_components
+    geometry_msgs
+    nav_msgs
+    sensor_msgs
+    std_msgs
+    std_srvs
+    visualization_msgs
+    pcl_ros
+    pcl_conversions
+    livox_ros_driver2)
 
 # Thirdparty libraries
 find_package(Eigen3 REQUIRED)
@@ -85,46 +85,44 @@ find_package(PCL REQUIRED COMPONENTS common io)
 message(Eigen: ${EIGEN3_INCLUDE_DIR})
 message(STATUS "PCL: ${PCL_INCLUDE_DIRS}")
 
-set(msg_files
-  "msg/Pose6D.msg"
-)
+set(msg_files "msg/Pose6D.msg")
 
-rosidl_generate_interfaces(${PROJECT_NAME}
-  ${msg_files}
-)
+rosidl_generate_interfaces(${PROJECT_NAME} ${msg_files})
 ament_export_dependencies(rosidl_default_runtime)
 
-add_executable(fastlio_mapping src/laserMapping.cpp include/ikd-Tree/ikd_Tree.cpp src/preprocess.cpp)
-target_include_directories(fastlio_mapping PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-  ${PCL_INCLUDE_DIRS}
-)
-target_link_libraries(fastlio_mapping ${PCL_LIBRARIES} ${PYTHON_LIBRARIES} Eigen3::Eigen)
+add_executable(fastlio_mapping src/laserMapping.cpp
+                               include/ikd-Tree/ikd_Tree.cpp src/preprocess.cpp)
+target_include_directories(
+  fastlio_mapping PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                         $<INSTALL_INTERFACE:include> ${PCL_INCLUDE_DIRS})
+target_link_libraries(fastlio_mapping ${PCL_LIBRARIES} ${PYTHON_LIBRARIES}
+                      Eigen3::Eigen)
 target_include_directories(fastlio_mapping PRIVATE ${PYTHON_INCLUDE_DIRS})
 
-list(APPEND EOL_LIST "foxy" "galactic" "eloquent" "dashing" "crystal")
+list(
+  APPEND
+  EOL_LIST
+  "foxy"
+  "galactic"
+  "eloquent"
+  "dashing"
+  "crystal")
 
 if($ENV{ROS_DISTRO} IN_LIST EOL_LIST)
   # Custommsg to support foxy & galactic
-  rosidl_target_interfaces(fastlio_mapping
-    ${PROJECT_NAME} "rosidl_typesupport_cpp")
+  rosidl_target_interfaces(fastlio_mapping ${PROJECT_NAME}
+                           "rosidl_typesupport_cpp")
 else()
-  rosidl_get_typesupport_target(cpp_typesupport_target
-    ${PROJECT_NAME} "rosidl_typesupport_cpp")
+  rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME}
+                                "rosidl_typesupport_cpp")
   target_link_libraries(fastlio_mapping ${cpp_typesupport_target})
 endif()
 
 ament_target_dependencies(fastlio_mapping ${dependencies})
 
 # ---------------- Install --------------- #
-install(TARGETS fastlio_mapping
-  DESTINATION lib/${PROJECT_NAME}
-)
+install(TARGETS fastlio_mapping DESTINATION lib/${PROJECT_NAME})
 
-install(
-  DIRECTORY config launch rviz
-  DESTINATION share/${PROJECT_NAME}
-)
+install(DIRECTORY config launch rviz DESTINATION share/${PROJECT_NAME})
 
 ament_package()

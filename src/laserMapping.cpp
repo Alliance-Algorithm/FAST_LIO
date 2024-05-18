@@ -56,6 +56,7 @@
 #include <std_srvs/srv/trigger.hpp>
 #include <tf2_ros/static_transform_broadcaster.h>
 #include <tf2_ros/transform_broadcaster.h>
+#include <utility>
 #include <visualization_msgs/msg/marker.hpp>
 
 #include <Eigen/Core>
@@ -136,7 +137,7 @@ PointCloudXYZI::Ptr feats_down_world(new PointCloudXYZI());
 PointCloudXYZI::Ptr normvec(new PointCloudXYZI(100000, 1));
 PointCloudXYZI::Ptr laserCloudOri(new PointCloudXYZI(100000, 1));
 PointCloudXYZI::Ptr corr_normvect(new PointCloudXYZI(100000, 1));
-PointCloudXYZI::Ptr _featsArray;
+PointCloudXYZI::Ptr featsArray;
 
 pcl::VoxelGrid<PointType> downSizeFilterSurf;
 pcl::VoxelGrid<PointType> downSizeFilterMap;
@@ -764,8 +765,8 @@ void h_share_model(state_ikfom& s, esekfom::dyn_share_datastruct<double>& ekfom_
 
 class LaserMappingNode : public rclcpp::Node {
 public:
-    LaserMappingNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
-        : Node("laser_mapping", options) {
+    explicit LaserMappingNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions())
+        : Node("fast_lio", options) {
         this->declare_parameter<bool>("publish.path_en", true);
         this->declare_parameter<bool>("publish.effect_map_en", false);
         this->declare_parameter<bool>("publish.map_en", false);
@@ -853,7 +854,7 @@ public:
         FOV_DEG      = (fov_deg + 10.0) > 179.9 ? 179.9 : (fov_deg + 10.0);
         HALF_FOV_COS = cos((FOV_DEG) * 0.5 * PI_M / 180.0);
 
-        _featsArray.reset(new PointCloudXYZI());
+        featsArray.reset(new PointCloudXYZI());
 
         memset(point_selected_surf, true, sizeof(point_selected_surf));
         memset(res_last, -1000.0f, sizeof(res_last));
@@ -930,18 +931,19 @@ public:
 
         //------------------------------------------------------------------------------------------------------
         auto period_ms = std::chrono::milliseconds(static_cast<int64_t>(1000.0 / 100.0));
-        timer_         = rclcpp::create_timer(
-            this, this->get_clock(), period_ms, std::bind(&LaserMappingNode::timer_callback, this));
+        timer_ =
+            rclcpp::create_timer(this, this->get_clock(), period_ms, [this] { timer_callback(); });
 
         auto map_period_ms = std::chrono::milliseconds(static_cast<int64_t>(1000.0));
         map_pub_timer_     = rclcpp::create_timer(
-            this, this->get_clock(), map_period_ms,
-            std::bind(&LaserMappingNode::map_publish_callback, this));
+            this, this->get_clock(), map_period_ms, [this] { map_publish_callback(); });
 
         map_save_srv_ = this->create_service<std_srvs::srv::Trigger>(
-            "map_save", std::bind(
-                            &LaserMappingNode::map_save_callback, this, std::placeholders::_1,
-                            std::placeholders::_2));
+            "/fast_lio/map_save", [this](
+                                      std_srvs::srv::Trigger::Request::ConstSharedPtr req,
+                                      std_srvs::srv::Trigger::Response::SharedPtr res) {
+                map_save_callback(std::move(req), std::move(res));
+            });
 
         RCLCPP_INFO(this->get_logger(), "Node init finished.");
     }
@@ -1127,8 +1129,9 @@ private:
     }
 
     void map_save_callback(
-        std_srvs::srv::Trigger::Request::ConstSharedPtr req,
-        std_srvs::srv::Trigger::Response::SharedPtr res) {
+        const std_srvs::srv::Trigger::Request::ConstSharedPtr& req,
+        const std_srvs::srv::Trigger::Response::SharedPtr& res) {
+
         RCLCPP_INFO(this->get_logger(), "Saving map to %s...", map_file_path.c_str());
 
         if (pcd_save_en) {
